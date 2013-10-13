@@ -5,7 +5,9 @@ import sys
 import os.path
 import unicodedata
 import Tkinter
+import shutil
 import tkFileDialog
+import glob
 print 'Ceci est une beta. Certaines bandes annonces pourront etre en anglais voir ne pas correspondre au film'
 root = Tkinter.Tk()
 directory = tkFileDialog.askdirectory(parent=root,initialdir="/",title='Choisir le repertoire a scanner')
@@ -46,9 +48,9 @@ else:
 count=0
 for movie in fichier:
     trailerpath=movie[0]
-    moviename=movie[1]
+    moviename = unicodedata.normalize('NFKD', movie[1]).encode('ascii','ignore')
     trailername=movie[2]+'-trailer'
-    searchstring=moviename +' bande annonce vf HD'
+    searchstring=moviename + u' bande annonce vf HD'
     time.sleep(5)
     print 'En train de rechercher sur google : ' +searchstring
     g = pygoogle(str(searchstring))
@@ -63,9 +65,9 @@ for movie in fichier:
         for bo in cleanlist:
             if bocount==0:
                 print 'En train de telecharger : ' + cleanlist[0] + ' pour ' +moviename
+                tempdest=unicodedata.normalize('NFKD', os.path.join(rootDir,trailername)).encode('ascii','ignore')+u'.%(ext)s'
                 dest=os.path.join(trailerpath,trailername)
-                destination=dest+u'.%(ext)s'
-                p=subprocess.Popen([sys.executable, 'youtube_dl/__main__.py', '-o',destination,'--newline', bo],cwd=rootDir, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                p=subprocess.Popen([sys.executable, 'youtube_dl/__main__.py', '-o',tempdest,'--newline', bo],cwd=rootDir, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
                 while p.poll() is None:
                     l = p.stdout.readline() # This blocks until it receives a newline.
                     print l +' ' + moviename + ' trailer'
@@ -74,12 +76,18 @@ for movie in fichier:
                 (out, err) = p.communicate()
                 print out
                 print err
-                if err:
+                if 'ERROR' in err:
                     continue
                 else:
-                    bocount=1
-                    print 'Une bande annonce telechargee pour ' + moviename
-                    count+=1
+                    listetemp=glob.glob(os.path.join(rootDir,'*'))
+                    for listfile in listetemp:
+                        if unicodedata.normalize('NFKD', trailername).encode('ascii','ignore') in listfile:
+                            ext=listfile[-4:]
+                            destination=dest+ext
+                            shutil.move(listfile, destination)
+                            bocount=1
+                            print 'Une bande annonce telechargee pour ' + moviename
+                            count+=1
             else:
                 continue
     else:
