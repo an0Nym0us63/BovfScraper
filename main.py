@@ -19,7 +19,7 @@ except AttributeError:
     _DEV_NULL = open(os.devnull, 'wb')
 path = directory
 def libraryscan(path):
-    print 'Veuillez patienter pendant la recherche des films sans bandes-annonces'
+    print 'Veuillez patienter pendant la recherche des films sans bandes-annonces dans ' + path
     fichier=[] 
     for root, dirs, files in os.walk(path): 
         for i in files: 
@@ -59,14 +59,31 @@ for movie in fichier:
         if 'youtube' in x or 'dailymotion' in x:
             cleanlist.append(x)
     if cleanlist:
-        print 'En train de telecharger : ' + cleanlist[0] + ' pour ' +moviename
-        dest=os.path.join(trailerpath,trailername)
-        destination=dest+u'.%(ext)s'
-        subprocess.check_call([sys.executable, 'youtube_dl/__main__.py', '-o',destination, cleanlist[0]], cwd=rootDir, shell=False, stdout=_DEV_NULL,stderr=subprocess.STDOUT)
-        print 'Une bande annonce telechargee pour ' + moviename
-        count+=1
+        bocount=0
+        for bo in cleanlist:
+            if bocount==0:
+                print 'En train de telecharger : ' + cleanlist[0] + ' pour ' +moviename
+                dest=os.path.join(trailerpath,trailername)
+                destination=dest+u'.%(ext)s'
+                p=subprocess.Popen([sys.executable, 'youtube_dl/__main__.py', '-o',destination,'--newline', bo],cwd=rootDir, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                while p.poll() is None:
+                    l = p.stdout.readline() # This blocks until it receives a newline.
+                    print l +' ' + moviename + ' trailer'
+                # When the subprocess terminates there might be unconsumed output 
+                # that still needs to be processed.
+                (out, err) = p.communicate()
+                print out
+                print err
+                if err:
+                    continue
+                else:
+                    bocount=1
+                    print 'Une bande annonce telechargee pour ' + moviename
+                    count+=1
+            else:
+                continue
     else:
         print 'Aucune bande annnonce trouvee pour ' + moviename
 print str(count) + ' bandes annonces telechargees. Veuillez appuyee sur ENTREE pour fermer la fenetre'
-raw.input()
+raw_input()
     
