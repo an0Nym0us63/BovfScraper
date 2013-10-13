@@ -43,12 +43,13 @@ if len(fichier)>0:
 else:
     print 'Aucun film sans bande annonce trouve. Appuyer sur ENTREE pour fermer la fenetre'
     raw_input()
+count=0
 for movie in fichier:
     trailerpath=movie[0]
     moviename=movie[1]
     trailername=movie[2]+'-trailer'
     searchstring=moviename +' bande annonce vf HD'
-    time.sleep(3)
+    time.sleep(5)
     print 'En train de rechercher sur google : ' +searchstring
     g = pygoogle(str(searchstring))
     diclist = g.search()
@@ -58,13 +59,14 @@ for movie in fichier:
         if 'youtube' in x or 'dailymotion' in x:
             cleanlist.append(x)
     if cleanlist:
-        print 'En train de telecharger : ' + cleanlist[0]
+        print 'En train de telecharger : ' + cleanlist[0] + ' pour ' +moviename
         dest=os.path.join(trailerpath,trailername)
         destination=dest+u'.%(ext)s'
         subprocess.check_call([sys.executable, 'youtube_dl/__main__.py', '-o',destination, cleanlist[0]], cwd=rootDir, shell=False, stdout=_DEV_NULL,stderr=subprocess.STDOUT)
-        print 'Une bande annonce telechargee pour ' + moviename + '. Appuyer sur ENTREE pour fermer la fenetre'
-        raw_input()
+        print 'Une bande annonce telechargee pour ' + moviename
+        count+=1
     else:
-        print 'Aucune bande annnonce trouvee pour ' + moviename + '. Appuyez sur ENTREE pour fermer la fenetre'
-        raw_input()
+        print 'Aucune bande annnonce trouvee pour ' + moviename
+print str(count) + ' bandes annonces telechargees. Veuillez appuyee sur ENTREE pour fermer la fenetre'
+raw.input()
     
