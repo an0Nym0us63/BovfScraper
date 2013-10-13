@@ -76,7 +76,7 @@ for movie in fichier:
                 (out, err) = p.communicate()
                 print out
                 print err
-                if 'ERROR' in err:
+                if err:
                     continue
                 else:
                     listetemp=glob.glob(os.path.join(rootDir,'*'))
