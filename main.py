@@ -41,7 +41,7 @@ fichier = libraryscan(path)
 if len(fichier)>0:
     print str(len(fichier)) + ' films sans bandes annonces ont ete trouves'
     for moviewithouttrailer in fichier:
-        print moviewithouttrailer[1]
+        print unicodedata.normalize('NFKD', moviewithouttrailer[1]).encode('ascii','ignore')
 else:
     print 'Aucun film sans bande annonce trouve. Appuyer sur ENTREE pour fermer la fenetre'
     raw_input()
