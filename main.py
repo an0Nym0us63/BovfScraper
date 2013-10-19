@@ -36,6 +36,66 @@ def libraryscan(path):
                     filename=filename[:filename.rfind(")")].replace(' 3DBD','').replace('(','')
                     fichier.append([fileroot,filename,i[:-4]]) 
     return fichier
+
+def googlesearch(searchstring):
+    print 'En attente 5 secondes de lautorisation de google'
+    time.sleep(5)
+    print 'En train de rechercher sur google : ' +searchstring
+    g = pygoogle(str(searchstring))
+    try:
+        urllist = g.get_urls()
+    except:
+        try:
+            print 'En attente 20 secondes de lautorisation de google'
+            time.sleep(20)
+            urllist = g.get_urls()
+        except:
+            try:
+                print 'En attente 60 secondes de lautorisation de google'
+                time.sleep(60)
+                urllist = g.get_urls()
+            except:
+                urllist=[]
+    return urllist
+
+def clean(urllist):
+    cleanlist=[]
+    for x in urllist:
+        if 'youtube' in x or 'dailymotion' in x:
+            cleanlist.append(x)
+    return cleanlist
+
+def videodl(cleanlist,trailername,moviename,trailerpath):
+    bocount=0
+    for bo in cleanlist:
+        if bocount==0:
+            print 'En train de telecharger : ' + cleanlist[0] + ' pour ' +moviename
+            tempdest=unicodedata.normalize('NFKD', os.path.join(rootDir,trailername)).encode('ascii','ignore')+u'.%(ext)s'
+            dest=os.path.join(trailerpath,trailername)
+            p=subprocess.Popen([sys.executable, 'youtube_dl/__main__.py', '-o',tempdest,'--newline', '--max-filesize', '105m', bo],cwd=rootDir, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            while p.poll() is None:
+                l = p.stdout.readline() # This blocks until it receives a newline.
+                print l +' ' + moviename + ' trailer'
+            # When the subprocess terminates there might be unconsumed output 
+            # that still needs to be processed.
+            (out, err) = p.communicate()
+            print out
+            print err
+            if err:
+                continue
+            else:
+                listetemp=glob.glob(os.path.join(rootDir,'*'))
+                for listfile in listetemp:
+                    if unicodedata.normalize('NFKD', trailername).encode('ascii','ignore') in listfile:
+                        ext=listfile[-4:]
+                        destination=dest+ext
+                        shutil.move(listfile, destination)
+                        bocount=1
+                        print 'Une bande annonce telechargee pour ' + moviename
+                        return True
+        else:
+            continue
+    return False
     
 fichier = libraryscan(path)
 if len(fichier)>0:
@@ -46,52 +106,29 @@ else:
     print 'Aucun film sans bande annonce trouve. Appuyer sur ENTREE pour fermer la fenetre'
     raw_input()
 count=0
+notfound=[]
 for movie in fichier:
     trailerpath=movie[0]
     moviename = unicodedata.normalize('NFKD', movie[1]).encode('ascii','ignore')
     trailername=movie[2]+'-trailer'
     searchstring=moviename + u' bande annonce vf HD'
-    time.sleep(5)
-    print 'En train de rechercher sur google : ' +searchstring
-    g = pygoogle(str(searchstring))
-    diclist = g.search()
-    urllist = g.get_urls()
-    cleanlist=[]
-    for x in urllist:
-        if 'youtube' in x or 'dailymotion' in x:
-            cleanlist.append(x)
+    urllist=googlesearch(searchstring)
+    cleanlist=clean(urllist)
     if cleanlist:
-        bocount=0
-        for bo in cleanlist:
-            if bocount==0:
-                print 'En train de telecharger : ' + cleanlist[0] + ' pour ' +moviename
-                tempdest=unicodedata.normalize('NFKD', os.path.join(rootDir,trailername)).encode('ascii','ignore')+u'.%(ext)s'
-                dest=os.path.join(trailerpath,trailername)
-                p=subprocess.Popen([sys.executable, 'youtube_dl/__main__.py', '-o',tempdest,'--newline', bo],cwd=rootDir, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-                while p.poll() is None:
-                    l = p.stdout.readline() # This blocks until it receives a newline.
-                    print l +' ' + moviename + ' trailer'
-                # When the subprocess terminates there might be unconsumed output 
-                # that still needs to be processed.
-                (out, err) = p.communicate()
-                print out
-                print err
-                if err:
-                    continue
-                else:
-                    listetemp=glob.glob(os.path.join(rootDir,'*'))
-                    for listfile in listetemp:
-                        if unicodedata.normalize('NFKD', trailername).encode('ascii','ignore') in listfile:
-                            ext=listfile[-4:]
-                            destination=dest+ext
-                            shutil.move(listfile, destination)
-                            bocount=1
-                            print 'Une bande annonce telechargee pour ' + moviename
-                            count+=1
-            else:
-                continue
+        videodl(cleanlist,trailername,moviename,trailerpath)
+        count+=1     
     else:
-        print 'Aucune bande annnonce trouvee pour ' + moviename
+        print 'Aucune bande annnonce trouvee pour ' + moviename + ' essai dune autre recherche'
+        searchstring=moviename[:-5] + u' bande annonce vf HD'
+        urllist=googlesearch(searchstring)
+        cleanlist=clean(urllist)
+        if cleanlist:
+            videodl(cleanlist,trailername,moviename,trailerpath)
+            count+=1      
+        else:     
+            notfound.append(moviename)
+for nf in notfound:
+    print 'Aucune bande annnonce trouvee pour ' + nf
 print str(count) + ' bandes annonces telechargees. Veuillez appuyee sur ENTREE pour fermer la fenetre'
 raw_input()
     

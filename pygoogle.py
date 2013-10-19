@@ -8,7 +8,7 @@ try:
 except:
     import json
 import urllib
-
+import time
 __author__ = "Kiran Bandla"
 __version__ = "0.1"
 URL = 'http://ajax.googleapis.com/ajax/services/search/web?'
@@ -68,6 +68,8 @@ class pygoogle:
         
     def __search__(self,print_results = False):
         results = []
+        print 'Waiting'
+        time.sleep(5)
         for page in range(0,self.pages):
             rsz = 8
             if self.rsz == RSZ_SMALL:
