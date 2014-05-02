@@ -1,159 +1,144 @@
+from __future__ import unicode_literals
+
 import datetime
-import json
-import os
 import re
-import socket
 
 from .common import InfoExtractor
+from .subtitles import SubtitlesInfoExtractor
 from ..utils import (
-    compat_http_client,
-    compat_parse_qs,
     compat_str,
-    compat_urllib_error,
-    compat_urllib_parse_urlparse,
     compat_urllib_request,
 
-    ExtractorError,
     unescapeHTML,
 )
 
 
-class BlipTVIE(InfoExtractor):
+class BlipTVIE(SubtitlesInfoExtractor):
     """Information extractor for blip.tv"""
 
-    _VALID_URL = r'^(?:https?://)?(?:\w+\.)?blip\.tv/((.+/)|(play/)|(api\.swf#))(.+)$'
-    _URL_EXT = r'^.*\.([a-z0-9]+)$'
-    IE_NAME = u'blip.tv'
-    _TEST = {
-        u'url': u'http://blip.tv/cbr/cbr-exclusive-gotham-city-imposters-bats-vs-jokerz-short-3-5796352',
-        u'file': u'5779306.m4v',
-        u'md5': u'80baf1ec5c3d2019037c1c707d676b9f',
-        u'info_dict': {
-            u"upload_date": u"20111205", 
-            u"description": u"md5:9bc31f227219cde65e47eeec8d2dc596", 
-            u"uploader": u"Comic Book Resources - CBR TV", 
-            u"title": u"CBR EXCLUSIVE: \"Gotham City Imposters\" Bats VS Jokerz Short 3"
-        }
-    }
+    _VALID_URL = r'https?://(?:\w+\.)?blip\.tv/((.+/)|(play/)|(api\.swf#))(?P<presumptive_id>.+)$'
 
-    def report_direct_download(self, title):
-        """Report information extraction."""
-        self.to_screen(u'%s: Direct download detected' % title)
+    _TESTS = [{
+        'url': 'http://blip.tv/cbr/cbr-exclusive-gotham-city-imposters-bats-vs-jokerz-short-3-5796352',
+        'md5': 'c6934ad0b6acf2bd920720ec888eb812',
+        'info_dict': {
+            'id': '5779306',
+            'ext': 'mov',
+            'upload_date': '20111205',
+            'description': 'md5:9bc31f227219cde65e47eeec8d2dc596',
+            'uploader': 'Comic Book Resources - CBR TV',
+            'title': 'CBR EXCLUSIVE: "Gotham City Imposters" Bats VS Jokerz Short 3',
+        }
+    }, {
+        # https://github.com/rg3/youtube-dl/pull/2274
+        'note': 'Video with subtitles',
+        'url': 'http://blip.tv/play/h6Uag5OEVgI.html',
+        'md5': '309f9d25b820b086ca163ffac8031806',
+        'info_dict': {
+            'id': '6586561',
+            'ext': 'mp4',
+            'uploader': 'Red vs. Blue',
+            'description': 'One-Zero-One',
+            'upload_date': '20130614',
+            'title': 'Red vs. Blue Season 11 Episode 1',
+        }
+    }]
 
     def _real_extract(self, url):
         mobj = re.match(self._VALID_URL, url)
-        if mobj is None:
-            raise ExtractorError(u'Invalid URL: %s' % url)
+        presumptive_id = mobj.group('presumptive_id')
 
         # See https://github.com/rg3/youtube-dl/issues/857
-        api_mobj = re.match(r'http://a\.blip\.tv/api\.swf#(?P<video_id>[\d\w]+)', url)
-        if api_mobj is not None:
-            url = 'http://blip.tv/play/g_%s' % api_mobj.group('video_id')
-        urlp = compat_urllib_parse_urlparse(url)
-        if urlp.path.startswith('/play/'):
-            request = compat_urllib_request.Request(url)
-            response = compat_urllib_request.urlopen(request)
-            redirecturl = response.geturl()
-            rurlp = compat_urllib_parse_urlparse(redirecturl)
-            file_id = compat_parse_qs(rurlp.fragment)['file'][0].rpartition('/')[2]
-            url = 'http://blip.tv/a/a-' + file_id
-            return self._real_extract(url)
-
-
-        if '?' in url:
-            cchar = '&'
-        else:
-            cchar = '?'
+        embed_mobj = re.match(r'https?://(?:\w+\.)?blip\.tv/(?:play/|api\.swf#)([a-zA-Z0-9]+)', url)
+        if embed_mobj:
+            info_url = 'http://blip.tv/play/%s.x?p=1' % embed_mobj.group(1)
+            info_page = self._download_webpage(info_url, embed_mobj.group(1))
+            video_id = self._search_regex(
+                r'data-episode-id="([0-9]+)', info_page, 'video_id')
+            return self.url_result('http://blip.tv/a/a-' + video_id, 'BlipTV')
+        
+        cchar = '&' if '?' in url else '?'
         json_url = url + cchar + 'skin=json&version=2&no_wrap=1'
         request = compat_urllib_request.Request(json_url)
         request.add_header('User-Agent', 'iTunes/10.6.1')
-        self.report_extraction(mobj.group(1))
-        info = None
-        try:
-            urlh = compat_urllib_request.urlopen(request)
-            if urlh.headers.get('Content-Type', '').startswith('video/'): # Direct download
-                basename = url.split('/')[-1]
-                title,ext = os.path.splitext(basename)
-                title = title.decode('UTF-8')
-                ext = ext.replace('.', '')
-                self.report_direct_download(title)
-                info = {
-                    'id': title,
-                    'url': url,
-                    'uploader': None,
-                    'upload_date': None,
-                    'title': title,
-                    'ext': ext,
-                    'urlhandle': urlh
-                }
-        except (compat_urllib_error.URLError, compat_http_client.HTTPException, socket.error) as err:
-            raise ExtractorError(u'ERROR: unable to download video info webpage: %s' % compat_str(err))
-        if info is None: # Regular URL
-            try:
-                json_code_bytes = urlh.read()
-                json_code = json_code_bytes.decode('utf-8')
-            except (compat_urllib_error.URLError, compat_http_client.HTTPException, socket.error) as err:
-                raise ExtractorError(u'Unable to read video info webpage: %s' % compat_str(err))
 
-            try:
-                json_data = json.loads(json_code)
-                if 'Post' in json_data:
-                    data = json_data['Post']
-                else:
-                    data = json_data
+        json_data = self._download_json(request, video_id=presumptive_id)
 
-                upload_date = datetime.datetime.strptime(data['datestamp'], '%m-%d-%y %H:%M%p').strftime('%Y%m%d')
-                if 'additionalMedia' in data:
-                    formats = sorted(data['additionalMedia'], key=lambda f: int(f['media_height']))
-                    best_format = formats[-1]
-                    video_url = best_format['url']
-                else:
-                    video_url = data['media']['url']
-                umobj = re.match(self._URL_EXT, video_url)
-                if umobj is None:
-                    raise ValueError('Can not determine filename extension')
-                ext = umobj.group(1)
+        if 'Post' in json_data:
+            data = json_data['Post']
+        else:
+            data = json_data
 
-                info = {
-                    'id': data['item_id'],
-                    'url': video_url,
-                    'uploader': data['display_name'],
-                    'upload_date': upload_date,
-                    'title': data['title'],
-                    'ext': ext,
-                    'format': data['media']['mimeType'],
-                    'thumbnail': data['thumbnailUrl'],
-                    'description': data['description'],
-                    'player_url': data['embedUrl'],
-                    'user_agent': 'iTunes/10.6.1',
-                }
-            except (ValueError,KeyError) as err:
-                raise ExtractorError(u'Unable to parse video information: %s' % repr(err))
+        video_id = compat_str(data['item_id'])
+        upload_date = datetime.datetime.strptime(data['datestamp'], '%m-%d-%y %H:%M%p').strftime('%Y%m%d')
+        subtitles = {}
+        formats = []
+        if 'additionalMedia' in data:
+            for f in data['additionalMedia']:
+                if f.get('file_type_srt') == 1:
+                    LANGS = {
+                        'english': 'en',
+                    }
+                    lang = f['role'].rpartition('-')[-1].strip().lower()
+                    langcode = LANGS.get(lang, lang)
+                    subtitles[langcode] = f['url']
+                    continue
+                if not int(f['media_width']):  # filter m3u8
+                    continue
+                formats.append({
+                    'url': f['url'],
+                    'format_id': f['role'],
+                    'width': int(f['media_width']),
+                    'height': int(f['media_height']),
+                })
+        else:
+            formats.append({
+                'url': data['media']['url'],
+                'width': int(data['media']['width']),
+                'height': int(data['media']['height']),
+            })
+        self._sort_formats(formats)
 
-        return [info]
+        # subtitles
+        video_subtitles = self.extract_subtitles(video_id, subtitles)
+        if self._downloader.params.get('listsubtitles', False):
+            self._list_available_subtitles(video_id, subtitles)
+            return
+
+        return {
+            'id': video_id,
+            'uploader': data['display_name'],
+            'upload_date': upload_date,
+            'title': data['title'],
+            'thumbnail': data['thumbnailUrl'],
+            'description': data['description'],
+            'user_agent': 'iTunes/10.6.1',
+            'formats': formats,
+            'subtitles': video_subtitles,
+        }
+
+    def _download_subtitle_url(self, sub_lang, url):
+        # For some weird reason, blip.tv serves a video instead of subtitles
+        # when we request with a common UA
+        req = compat_urllib_request.Request(url)
+        req.add_header('Youtubedl-user-agent', 'youtube-dl')
+        return self._download_webpage(req, None, note=False)
 
 
 class BlipTVUserIE(InfoExtractor):
-    """Information Extractor for blip.tv users."""
-
     _VALID_URL = r'(?:(?:(?:https?://)?(?:\w+\.)?blip\.tv/)|bliptvuser:)([^/]+)/*$'
     _PAGE_SIZE = 12
-    IE_NAME = u'blip.tv:user'
+    IE_NAME = 'blip.tv:user'
 
     def _real_extract(self, url):
-        # Extract username
         mobj = re.match(self._VALID_URL, url)
-        if mobj is None:
-            raise ExtractorError(u'Invalid URL: %s' % url)
-
         username = mobj.group(1)
 
         page_base = 'http://m.blip.tv/pr/show_get_full_episode_list?users_id=%s&lite=0&esi=1'
 
-        page = self._download_webpage(url, username, u'Downloading user page')
+        page = self._download_webpage(url, username, 'Downloading user page')
         mobj = re.search(r'data-users-id="([^"]+)"', page)
         page_base = page_base % mobj.group(1)
-
 
         # Download video ids using BlipTV Ajax calls. Result size per
         # query is limited (currently to 12 videos) so we need to query
@@ -165,8 +150,8 @@ class BlipTVUserIE(InfoExtractor):
 
         while True:
             url = page_base + "&page=" + str(pagenum)
-            page = self._download_webpage(url, username,
-                                          u'Downloading video ids from page %d' % pagenum)
+            page = self._download_webpage(
+                url, username, 'Downloading video ids from page %d' % pagenum)
 
             # Extract video identifiers
             ids_in_page = []
@@ -188,6 +173,6 @@ class BlipTVUserIE(InfoExtractor):
 
             pagenum += 1
 
-        urls = [u'http://blip.tv/%s' % video_id for video_id in video_ids]
+        urls = ['http://blip.tv/%s' % video_id for video_id in video_ids]
         url_entries = [self.url_result(vurl, 'BlipTV') for vurl in urls]
-        return [self.playlist_result(url_entries, playlist_title = username)]
+        return [self.playlist_result(url_entries, playlist_title=username)]

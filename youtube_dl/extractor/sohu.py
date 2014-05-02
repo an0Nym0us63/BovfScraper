@@ -1,4 +1,4 @@
-# encoding: latin-1
+# encoding: utf-8
 
 import json
 import re
@@ -17,6 +17,7 @@ class SohuIE(InfoExtractor):
         u'info_dict': {
             u'title': u'MV：Far East Movement《The Illest》',
         },
+        u'skip': u'Only available from China',
     }
 
     def _real_extract(self, url):
