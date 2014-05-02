@@ -68,7 +68,7 @@ class pygoogle:
         
     def __search__(self,print_results = False):
         results = []
-        print 'Waiting'
+        print 'En attente...'
         time.sleep(5)
         for page in range(0,self.pages):
             rsz = 8

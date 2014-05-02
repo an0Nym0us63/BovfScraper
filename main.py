@@ -332,13 +332,13 @@ for movie in fichier:
                     for tocontrolqual in cleanlistctrl:
                         print 'Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...'
                         logging.info('Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...')
-                    if quacontrol(tocontrolqual):
-                        print 'La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste'
-                        logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
-                        cleanlist.append(tocontrolqual)
-                    else:
-                        print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore'
-                        logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore')
+                        if quacontrol(tocontrolqual):
+                            print 'La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste'
+                            logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
+                            cleanlist.append(tocontrolqual)
+                        else:
+                            print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore'
+                            logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore')
                     if low:
                         listlowq.append(low)
                     if cleanlist:
