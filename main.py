@@ -48,11 +48,7 @@ def cleandic(dict,moviename,hd=True):
     for titledict in titlenames:
         cleandict=cleantitle(titledict)
         if cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'vf' in cleandict:
-            if hd:
-                if 'hd' in cleandict:
-                    listkeys.append(titledict)
-            else:
-                listkeys.append(titledict)
+            listkeys.append(titledict)
         urllist=[]
         for listkey in listkeys:
             urllist.append(dict[listkey])
@@ -119,12 +115,14 @@ def allocinesearch(moviename):
             ficheresult=api.movie(result['code'])
             ficheresulttitle=cleantitle(ficheresult['movie']['title'])
             ficheresulttitleori=cleantitle(ficheresult['movie']['originalTitle'])
-            test=cleantitle(moviename[:-5].decode('unicode-escape'))
+            yearresult=ficheresult['movie']['productionYear']
+            if not yearresult:
+                yearresult=0
             for x in series:
-                if x in ficheresulttitle or x in ficheresulttitleori:
+                if (x in ficheresulttitle or x in ficheresulttitleori) and (not '3d' in ficheresulttitle and not '3d' in ficheresulttitleori):
                     if x not in moviename[:-5]:
                         countseries+=1                        
-            if cleantitle(moviename[:-5].decode('unicode-escape')) in ficheresulttitle and countseries==0:
+            if cleantitle(moviename[:-5].decode('unicode-escape')) in ficheresulttitle and countseries==0 and int(moviename[len(moviename)-4:])+2>yearresult and int(moviename[len(moviename)-4:])-2<yearresult:
                 goodresult=result
                 break
         print "Resultat : Nombre [{0}] Code [{1}] Titre original [{2}]".format(search['feed']['totalResults'],
@@ -265,11 +263,9 @@ for movie in fichier:
                 logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
                 cleanlist.append(tocontrolqual)
             else:
-                print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore'
-                logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore')
-        low=cleandic(urldic,moviename,False)
-        if low:
-            listlowq.append(low)
+                print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
+                logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
+                listlowq.append(tocontrolqual)
         if cleanlist:
             print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
             logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
@@ -289,10 +285,9 @@ for movie in fichier:
                     logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
                     cleanlist.append(tocontrolqual)
                 else:
-                    print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore'
-                    logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore')
-            if low:
-                listlowq.append(low)
+                    print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
+                    logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
+                    listlowq.append(tocontrolqual)
             if cleanlist:
                 print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
                 logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
@@ -313,10 +308,9 @@ for movie in fichier:
                         logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
                         cleanlist.append(tocontrolqual)
                     else:
-                        print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore'
-                        logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore')
-                if low:            
-                    listlowq.append(low)
+                        print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
+                        logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
+                        listlowq.append(tocontrolqual)
                 if cleanlist:
                     print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
                     logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
@@ -337,10 +331,9 @@ for movie in fichier:
                             logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
                             cleanlist.append(tocontrolqual)
                         else:
-                            print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore'
-                            logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD jignore')
-                    if low:
-                        listlowq.append(low)
+                            print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
+                            logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
+                            listlowq.append(tocontrolqual)
                     if cleanlist:
                         print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
                         logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
@@ -368,15 +361,20 @@ for movie in fichier:
                                 print 'Snifff encore un film pourri pas de bande annonce trouve pour ' + moviename
                                 logging.info('Snifff encore un film pourri pas de bande annonce trouve pour ' + moviename)
                                 notfound.append(moviename)
+if notfound:
+    file = open("BANONDL.txt", "w")
 for nf in notfound:
     print 'Aucune bande annnonce trouvee pour ' + nf
     logging.info('Aucune bande annnonce trouvee pour ' + nf)
+    file.write(nf+"\n")
+if notfound:
+    file.close()
 print str(countallo) + ' bandes annonces telechargees sur Allocine'
 logging.info(str(countallo) + ' bandes annonces telechargees sur Allocine')
 print str(countgoogle) + ' bandes annonces telechargees sur Google'
 logging.info(str(countgoogle) + ' bandes annonces telechargees sur Google')
-print str(countallo+countgoogle)+ ' bandes annonces telechargees au total'
-logging.info(str(countallo+countgoogle)+ ' bandes annonces telechargees au total')
+print str(countallo+countgoogle)+ ' bandes annonces telechargees sur un total de '+str(len(fichier)) 
+logging.info(str(countallo+countgoogle)+ ' bandes annonces telechargees sur un total de '+str(len(fichier)))
 print 'Veuillez appuyer sur ENTREE pour fermer la fenetre'
 raw_input()
     
