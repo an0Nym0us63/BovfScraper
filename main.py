@@ -1,4 +1,4 @@
-from pygoogle import pygoogle
+# -*- coding: latin-1 -*-
 import subprocess
 import time
 import sys
@@ -13,9 +13,15 @@ from allocine import allocine
 import urllib
 import urllib2
 import logging
+import mechanize
+import re
 from bs4 import BeautifulSoup
 api = allocine()
 api.configure('100043982026','29d185d98c984a359e6e6f26a0474269')
+global lastgsearch
+global waittime
+waittime=0
+lastgsearch=0
 logging.basicConfig(filename='trace.log', filemode='w', level=logging.DEBUG)
 logging.info('Ceci est une beta. Certaines bandes annonces pourront etre en anglais voir ne pas correspondre au film')
 print 'Ceci est une beta. Certaines bandes annonces pourront etre en anglais voir ne pas correspondre au film'
@@ -33,7 +39,7 @@ except AttributeError:
 path = directory
 
 def cleantitle(title):
-    specialchars=[',','.',';','!','?','-',':','  ']
+    specialchars=[',','.',';','!','?','-',':','_','  ']
     title=unicodedata.normalize('NFKD',title).encode('ascii','ignore')
     for chars in specialchars:
         if chars=='  ':
@@ -42,17 +48,35 @@ def cleantitle(title):
             title=title.replace(chars,'')        
     return title.lower()
 
-def cleandic(dict,moviename,hd=True):
+def cleandic(dict,moviename):
     titlenames=urldic.keys()
-    listkeys=[]
+    listkeysvf=[]
+    listkeysvostfr=[]
+    listkeysvo=[]
     for titledict in titlenames:
         cleandict=cleantitle(titledict)
-        if cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'vf' in cleandict:
-            listkeys.append(titledict)
-        urllist=[]
-        for listkey in listkeys:
-            urllist.append(dict[listkey])
-    return urllist
+        if cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'annonce' in cleandict and ('vf' in cleandict or 'francais' in cleandict) :
+            listkeysvf.append(titledict)
+        elif cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'annonce' in cleandict and ('vost' in cleandict):
+            listkeysvostfr.append(titledict)
+        elif cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'annonce' in cleandict:
+            listkeysvo.append(titledict)
+    urllistvf=[]
+    urllistvostfr=[]
+    urllistvo=[]
+    for listkey in listkeysvf:
+        urllistvf.append(dict[listkey])
+    for listkey in listkeysvostfr:
+        urllistvostfr.append(dict[listkey])
+    for listkey in listkeysvo:
+        urllistvo.append(dict[listkey])
+    print str(len(urllistvf)) + ' liens de bandes annonces VF trouves sur google'
+    logging.info(str(len(urllistvf)) + ' liens de bandes annonces VF trouves sur google')
+    print str(len(urllistvostfr)) + ' liens de bandes annonces VOSTFR trouves sur google'
+    logging.info(str(len(urllistvostfr)) + ' liens de bandes annonces VOSTFR trouves sur google')
+    print str(len(urllistvo)) + ' liens de bandes annonces VO trouves sur google'
+    logging.info(str(len(urllistvo)) + ' liens de bandes annonces VO trouves sur google')
+    return urllistvf,urllistvostfr,urllistvo
 
 def libraryscan(path):
     print 'Veuillez patienter pendant la recherche des films sans bandes-annonces dans ' + path
@@ -75,37 +99,67 @@ def libraryscan(path):
                 if trailercount==0:
                     fileroot=root
                     filename=i
-                    filename=filename[:filename.rfind(")")].replace(' 3DBD','').replace('(','')
+                    filename=filename[:filename.rfind(")")].replace(' 3DBD','').replace('(','').replace(')','')
                     fichier.append([fileroot,filename,i[:-4]])
                     print str(currentnumber)+' fichiers scannes sur un total de '+str(numberfiles)   
     print str(numberfiles)+' fichiers scannes sur un total de '+str(numberfiles)
     return fichier
 
 def googlesearch(searchstring):
-    print 'En attente 10 secondes de lautorisation de google'
-    time.sleep(10)
+    global lastgsearch
+    global waittime
+    actualtime=int(time.time())
+    if actualtime-lastgsearch<120:
+        timetosleep= 120-(actualtime-lastgsearch)
+        print 'Attente ' +str(timetosleep)+ ' secondes ....'
+        time.sleep(timetosleep)
+        waittime+=timetosleep
+    lastgsearch = int(time.time())
+    searchstring=searchstring.replace(' ','+')
+
+    regexurl ="url(?!.*url).*?&amp"
+    patternurl = re.compile(regexurl)
+
+    regextitle='">(?!.*">).*?<\/a'
+    patterntitle= re.compile(regextitle)
+
+    br=mechanize.Browser()
+    br.set_handle_robots(False)
+    br.addheaders=[('User-agent','chrome')]
+
+    query="https://www.google.fr/search?num=100&q=bande-annonce+OR+bande+OR+annonce+"+'"'+searchstring+'"'"+VF+HD+site:http://www.youtube.com+OR+site:http://www.dailymotion.com&ie=latin-1&oe=latin-1&aq=t&rls=org.mozilla:fr:official&client=firefox-a&channel=np&source=hp&gfe_rd=cr&ei=MW9lU_vDIK2A0AXbroCADw"
     print 'En train de rechercher sur google : ' +searchstring
     logging.info('En train de rechercher sur google : ' +searchstring)
-    g = pygoogle(str(searchstring))
-    try:
-        urldic = g.search()
-    except:
+    htmltext=br.open(query).read()
+    soup=BeautifulSoup(htmltext)
+    search=soup.findAll('div',attrs={'id':'search'})
+    searchtext = str(search[0])
+
+    soup1=BeautifulSoup(searchtext)
+    list_items=soup1.findAll('li')
+    urldic={}
+    for li in list_items:
         try:
-            print 'En attente 90 secondes de lautorisation de google'
-            time.sleep(90)
-            urldic = g.search()
+            soup2 = BeautifulSoup(str(li))
+            links= soup2.findAll('a')
+            #TOCLEAN
+            if ('.youtube.' in str(links) or '.dailymotion.' in str(links)) and not 'webcache' in str(links): 
+                source_link=links[0]
+                source_url = str(re.findall(patternurl,str(source_link))[0]).replace('url?q=','').replace('&amp','').replace('%3F','?').replace('%3D','=')
+                source_title= str(re.findall(patterntitle,str(source_link))[0]).replace('">','').replace('</a','').replace('<b>','').replace('</b>','').decode("utf-8")
+                urldic.update({source_title:source_url})
+            
         except:
-            try:
-                print 'En attente 240 secondes de lautorisation de google'
-                time.sleep(240)
-                urldic = g.search()
-            except:
-                urldic={}
+            continue
+    print str(len(urldic)) + ' resultats trouves sur google'
+    logging.info(str(len(urldic))+ ' resultats trouves sur google')
     return urldic
 
 def allocinesearch(moviename):
     series=['2','3','4','5','6','7','8']
-    specialchars=[' :',',','.',';','!','?','-',':']
+    listallovostfr=[]
+    listallovo=[]
+    listallovf=[]
     print 'Tentative de recherche sur Allocine de ' +moviename[:-5]
     logging.info('Tentative de recherche sur Allocine de ' +moviename[:-5])
     try:
@@ -116,6 +170,7 @@ def allocinesearch(moviename):
             ficheresulttitle=cleantitle(ficheresult['movie']['title'])
             ficheresulttitleori=cleantitle(ficheresult['movie']['originalTitle'])
             yearresult=ficheresult['movie']['productionYear']
+            test=cleantitle(moviename[:-5].decode('unicode-escape'))
             if not yearresult:
                 yearresult=0
             for x in series:
@@ -127,7 +182,7 @@ def allocinesearch(moviename):
                 break
         print "Resultat : Nombre [{0}] Code [{1}] Titre original [{2}]".format(search['feed']['totalResults'],
                                                                     goodresult['code'],
-                                                                    goodresult['originalTitle'])
+                                                                    goodresult['originalTitle'].encode("latin-1"))
         print 'Recherche de la fiche du film avec le code : ' + str(goodresult['code'])
         logging.info('Recherche de la fiche du film avec le code : ' + str(goodresult['code']))
         movieallo = ficheresult
@@ -138,23 +193,86 @@ def allocinesearch(moviename):
                 continue
         soup = BeautifulSoup( urllib2.urlopen(pagetrailer), "html.parser" )
         rows = soup.findAll("a")
+        
         for lien in rows:
-            if 'Bande-annonce' in str(lien) and 'VF' in str(lien):
-                lienid=lien['href'][:lien['href'].find('&')].replace('/video/player_gen_cmedia=','')
-        print "Potentiel code de bande annonce [{0}]".format(lienid)
-        logging.info("Potentiel code de bande annonce [{0}]".format(lienid))
-        print "Recuperation de la liste des bandes annonces et identification de la meilleure qualite"
-        trailerallo = api.trailer(lienid)
-        long=len(trailerallo['media']['rendition'])
-        bestba=trailerallo['media']['rendition'][long-1]
-        linkallo=trailerallo['media']['rendition'][long-1]['href']
-        heightbaallo=bestba['height']
-        longadr=len(linkallo)
-        extallo=linkallo[longadr-3:]
+            try:
+                if 'Bande-annonce' in str(lien) and 'VF' in str(lien):
+                    lienid=lien['href'][:lien['href'].find('&')].replace('/video/player_gen_cmedia=','')
+                    print "Potentiel code de bande annonce [{0}] en VF".format(lienid)
+                    logging.info("Potentiel code de bande annonce [{0}] en VF".format(lienid))
+                    trailerallo = api.trailer(lienid)
+                    long=len(trailerallo['media']['rendition'])
+                    bestba=trailerallo['media']['rendition'][long-1]
+                    linkallo=trailerallo['media']['rendition'][long-1]['href']
+                    heightbaallo=bestba['height']
+                    longadr=len(linkallo)
+                    extallo=linkallo[longadr-3:]
+                    
+                    listallovf.append({'link':linkallo,'ext':extallo,'height':heightbaallo})
+                    if heightbaallo>=481:
+                        print 'Bande annonce vf et HD trouve sur Allocine jarrete de chercher'
+                        logging.info('Bande annonce vf et HD trouve sur Allocine jarrete de chercher')
+                        break
+                    else:
+                        print 'Bande annonce vf non HD trouve sur Allocine je continue de chercher'
+                        logging.info('Bande annonce vf non HD trouve sur Allocine je continue de chercher')
+                elif 'Bande-annonce' in str(lien) and 'VOSTFR' in str(lien):
+                    lienid=lien['href'][:lien['href'].find('&')].replace('/video/player_gen_cmedia=','')
+                    print "Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid)
+                    logging.info("Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid))
+                    trailerallo = api.trailer(lienid)
+                    long=len(trailerallo['media']['rendition'])
+                    bestba=trailerallo['media']['rendition'][long-1]
+                    linkallo=trailerallo['media']['rendition'][long-1]['href']
+                    heightbaallo=bestba['height']
+                    longadr=len(linkallo)
+                    extallo=linkallo[longadr-3:]
+                    
+                    listallovostfr.append({'link':linkallo,'ext':extallo,'height':heightbaallo})
+                    print 'Bande annonce vostfr trouve sur Allocine je continue de chercher'
+                    logging.info('Bande annonce vostfr trouve sur Allocine je continue de chercher')
+                elif 'Bande-annonce' in str(lien) and 'VO' in str(lien):
+                    lienid=lien['href'][:lien['href'].find('&')].replace('/video/player_gen_cmedia=','') 
+                    trailerallo = api.trailer(lienid)
+                    long=len(trailerallo['media']['rendition'])
+                    bestba=trailerallo['media']['rendition'][long-1]
+                    linkallo=trailerallo['media']['rendition'][long-1]['href']
+                    heightbaallo=bestba['height']
+                    longadr=len(linkallo)
+                    extallo=linkallo[longadr-3:]
+                    isstfr=trailerallo['media']['subtitles']['$']
+                    if isstfr ==u'Français':
+                        print "Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid)
+                        logging.info("Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid))
+                        listallovostfr.append({'link':linkallo,'ext':extallo,'height':heightbaallo})
+                        print 'Bande annonce vostfr trouve sur Allocine je continue de chercher'
+                        logging.info('Bande annonce vostfr trouve sur Allocine je continue de chercher')
+                    else:
+                        print "Potentiel code de bande annonce [{0}] en VO".format(lienid)
+                        logging.info("Potentiel code de bande annonce [{0}] en VO".format(lienid))
+                        listallovo.append({'link':linkallo,'ext':extallo,'height':heightallo})
+                        print 'Bande annonce vo trouve sur Allocine je continue de chercher'
+                        logging.info('Bande annonce vo trouve sur Allocine je continue de chercher')
                 
-        return linkallo,extallo,heightbaallo
-    except:
-        return 'None','None',0
+                else:
+                    continue
+            except:
+                continue
+        print str(len(listallovf)) +" bandes annonces en VF trouvees sur allocine"
+        logging.info(str(len(listallovf)) +" bandes annonces en VF trouvees sur allocine")
+        print str(len(listallovostfr)) +" bandes annonces en VOSTFR trouvees sur allocine"
+        logging.info(str(len(listallovostfr)) +" bandes annonces en VOSTFR trouvees sur allocine")
+        print str(len(listallovo)) +" bandes annonces en VO trouvees sur allocine"
+        logging.info(str(len(listallovo)) +" bandes annonces en VO trouvees sur allocine")       
+        return listallovf,listallovostfr,listallovo
+    except :
+        print str(len(listallovf)) +" bandes annonces en VF trouvees sur allocine"
+        logging.info(str(len(listallovf)) +" bandes annonces en VF trouvees sur allocine")
+        print str(len(listallovostfr)) +" bandes annonces en VOSTFR trouvees sur allocine"
+        logging.info(str(len(listallovostfr)) +" bandes annonces en VOSTFR trouvees sur allocine")
+        print str(len(listallovo)) +" bandes annonces en VO trouvees sur allocine"
+        logging.info(str(len(listallovo)) +" bandes annonces en VO trouvees sur allocine")  
+        return listallovf,listallovostfr,listallovo
 
 def quacontrol(url):
     quallist=[]
@@ -169,45 +287,96 @@ def quacontrol(url):
         else:
             continue
     return False
-                               
-def videodl(cleanlist,trailername,moviename,trailerpath):
-    bocount=0
-    for bo in cleanlist:
-        if bocount==0:
-            try:
-                print 'En train de telecharger : ' + bo + ' pour ' +moviename
-                logging.info('En train de telecharger : ' + bo + ' pour ' +moviename)
-                tempdest=unicodedata.normalize('NFKD', os.path.join(rootDir,trailername)).encode('ascii','ignore')+u'.%(ext)s'
-                dest=os.path.join(trailerpath,trailername)
-                p=subprocess.Popen([sys.executable, 'youtube_dl/__main__.py', '-o',tempdest,'--newline', '--max-filesize', '105m', '--format','best',bo],cwd=rootDir, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-                while p.poll() is None:
-                    l = p.stdout.readline() # This blocks until it receives a newline.
-                    if 'download' in l:
-                        print l.replace('\n','')
-                # When the subprocess terminates there might be unconsumed output 
-                # that still needs to be processed.
-                (out, err) = p.communicate()
-                print out
-                print err
-                if err:
+
+def quacontrolallo(listallo,type):
+    bestqualallo=0
+    for linkvf in listallo:
+        if bestqualallo<linkvf['height']:
+            bestqualallo=linkvf['height']
+    print 'Meilleure resolution trouvee sur Allocine en '+type+' : '+str(bestqualallo)+'p'
+    logging.info('Meilleure resolution trouvee sur Allocine en '+type+' : '+str(bestqualallo)+'p')
+    return bestqualallo
+
+def videodl(cleanlist,trailername,moviename,trailerpath,allo=False,maxheight=0):
+    if allo:
+        for url in cleanlist:
+            if maxheight==url['height']:
+                linkallo=url['link']
+                heightbaallo=url['height']
+                extallo=url['ext']
+                print 'Telechargement de la bande annonce suivante : ' + linkallo +' en '+str(heightbaallo)+'p en cours...'
+                logging.info('Telechargement de la bande annonce suivante : ' + linkallo +' en '+str(heightbaallo)+'p en cours...')
+                try:
+                    urllib.urlretrieve(linkallo, os.path.join(trailerpath,trailername)+'.'+extallo)
+                    print 'Une bande annonce telechargee pour ' + moviename +' sur Allocine'
+                    logging.info('Une bande annonce telechargee pour ' + moviename +' sur Allocine')
+                    return True
+                    break
+                except:
                     continue
-                else:
-                    listetemp=glob.glob(os.path.join(rootDir,'*'))
-                    for listfile in listetemp:
-                        if unicodedata.normalize('NFKD', trailername).encode('ascii','ignore') in listfile:
-                            ext=listfile[-4:]
-                            destination=dest+ext
-                            shutil.move(listfile, destination)
-                            bocount=1
-                            print 'Une bande annonce telechargee pour ' + moviename
-                            logging.info('Une bande annonce telechargee pour ' + moviename)
-                            return True
-            except:
+        return False
+    else:
+        bocount=0
+        for bo in cleanlist:
+            if bocount==0:
+                try:
+                    print 'En train de telecharger : ' + bo + ' pour ' +moviename
+                    logging.info('En train de telecharger : ' + bo + ' pour ' +moviename)
+                    tempdest=unicodedata.normalize('NFKD', os.path.join(rootDir,trailername.replace("'",''))).encode('ascii','ignore')+u'.%(ext)s'
+                    dest=os.path.join(trailerpath,trailername)
+                    p=subprocess.Popen([sys.executable, 'youtube_dl/__main__.py', '-o',tempdest,'--newline', '--max-filesize', '105m', '--format','best',bo],cwd=rootDir, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                    while p.poll() is None:
+                        l = p.stdout.readline() # This blocks until it receives a newline.
+                        if 'download' in l:
+                            print l.replace('\n','')
+                    # When the subprocess terminates there might be unconsumed output 
+                    # that still needs to be processed.
+                    (out, err) = p.communicate()
+                    print out
+                    print err
+                    if err:
+                        continue
+                    else:
+                        listetemp=glob.glob(os.path.join(rootDir,'*'))
+                        for listfile in listetemp:
+                            if unicodedata.normalize('NFKD', trailername).encode('ascii','ignore') in listfile:
+                                ext=listfile[-4:]
+                                destination=dest+ext
+                                shutil.move(listfile, destination)
+                                bocount=1
+                                print 'Une bande annonce telechargee pour ' + moviename
+                                logging.info('Une bande annonce telechargee pour ' + moviename)
+                                return True
+                except:
+                    continue
+            else:
                 continue
+        return False
+
+def totqualcontrol(listcontrol,type):
+    compteurhd=0
+    cleanlist=[]
+    listlowq=[]
+    for tocontrolqual in listcontrol:
+        if compteurhd==3:
+            print 'Suffisamment de bandes annonces '+type+ ' HD trouvees plus la peine de continuer'
+            logging.info('Suffisamment de bandes annonces '+type+ ' HD trouvees plus la peine de continuer')
+            break
+        print 'Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...'
+        logging.info('Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...')
+        
+        if quacontrol(tocontrolqual):
+            print 'La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste HD '+type
+            logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste  HD '+type)
+            cleanlist.append(tocontrolqual)
+            compteurhd+=1
         else:
-            continue
-    return False
-    
+            print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD je rajoute a la liste non HD '+ type
+            logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD je rajoute a la liste non HD '+type)
+            listlowq.append(tocontrolqual)
+    return cleanlist, listlowq
+
+
 fichier = libraryscan(path)
 if len(fichier)>0:
     print str(len(fichier)) + ' films sans bandes annonces ont ete trouves'
@@ -223,144 +392,166 @@ countgoogle=0
 countallo=0
 compteur=0
 notfound=[]
+start=int(time.time())
 for movie in fichier:
-    listBA=[]
-    listlowq=[]
     print '####################Il reste ' + str(len(fichier)-compteur)+' films######################'
     logging.info('####################Il reste ' + str(len(fichier)-compteur)+' films######################')
     compteur+=1
     trailerpath=movie[0]
     moviename = unicodedata.normalize('NFKD', movie[1]).encode('ascii','ignore')
     trailername=movie[2]+'-trailer'
-    searchstring=moviename + u' bande annonce vf HD'
-    linkallo,extallo,heightbaallo=allocinesearch(moviename)
-    if linkallo<>'None':
-        print 'Meilleure resolution trouvee sur Allocine : '+str(heightbaallo)+'p'
-        logging.info('Meilleure resolution trouvee sur Allocine : '+str(heightbaallo)+'p')
-    if linkallo <>'None' and heightbaallo>=481:
-        print 'Telechargement de la bande annonce suivante : ' + linkallo +' en '+str(heightbaallo)+'p en cours...'
-        logging.info('Telechargement de la bande annonce suivante : ' + linkallo +' en '+str(heightbaallo)+'p en cours...')
-        urllib.urlretrieve(linkallo, os.path.join(trailerpath,trailername)+'.'+extallo)
-        countallo+=1
-        print 'Une bande annonce telechargee pour ' + moviename +' sur Allocine'
-        logging.info('Une bande annonce telechargee pour ' + moviename +' sur Allocine')
+    searchstring=moviename[:-5]
+    listvfallo,listvostfrallo,listvoallo=allocinesearch(moviename)
+    if listvfallo:
+        maxqual=quacontrolallo(listvfallo,'vf')
+        
+        if maxqual>=481:
+            videodl(listvfallo,trailername,moviename,trailerpath,True,maxqual)
+            countallo+=1
+            continue
+        else:
+            print 'Bande annonce en VF non HD trouvee sur Allocine tentative de recherche dune meilleure qualite sur google'
+            logging.info('Bande annonce en VF non HD trouvee sur Allocine tentative de recherche dune meilleure qualite sur google')
     else:
-        if linkallo <>'None':
-            listBA.append({'link':linkallo,'ext':extallo,'height':heightbaallo,'site':'allocine'})
-            print 'Tentative de recherche dune meilleure qualite sur google'
-            logging.info('Tentative de recherche dune meilleure qualite sur google')
-        else:
-            print 'Rien trouve sur Allocine Tentative de recherche sur google'
-            logging.info('Rien trouve sur Allocine Tentative de recherche sur google')
-        urldic=googlesearch(searchstring+' site:http://www.youtube.com')
-        cleanlistctrl=cleandic(urldic,moviename)
-        cleanlist=[]
-        for tocontrolqual in cleanlistctrl:
-            print 'Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...'
-            logging.info('Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...')
-            if quacontrol(tocontrolqual):
-                print 'La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste'
-                logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
-                cleanlist.append(tocontrolqual)
-            else:
-                print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
-                logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
-                listlowq.append(tocontrolqual)
-        if cleanlist:
-            print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
-            logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
-            videodl(cleanlist,trailername,moviename,trailerpath)
-            countgoogle+=1     
-        else:
-            print 'Aucune bande annnonce trouvee pour ' + moviename + ' sur youtube en HD essai sur dailymotion'
-            logging.info('Aucune bande annnonce trouvee pour ' + moviename + ' sur youtube en HD essai sur dailymotion')
-            urldic=googlesearch(searchstring+' site:http://www.dailymotion.com')
-            cleanlistctrl=cleandic(urldic,moviename)
-            cleanlist=[]
-            for tocontrolqual in cleanlistctrl:
-                print 'Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...'
-                logging.info('Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...')
-                if quacontrol(tocontrolqual):
-                    print 'La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste'
-                    logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
-                    cleanlist.append(tocontrolqual)
-                else:
-                    print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
-                    logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
-                    listlowq.append(tocontrolqual)
-            if cleanlist:
+        print 'Rien trouve sur Allocine en VF tentative de recherche sur google'
+        logging.info('Rien trouve sur Allocine en VF tentative de recherche sur google')
+    urldic=googlesearch(searchstring)
+    listgooglevf, listgooglevostfr,listgooglevo=cleandic(urldic,moviename)
+    if listvfallo:
+        maxqual=quacontrolallo(listvfallo,'vf')
+        if listgooglevf:
+            print 'Jai trouve des bandes annonces VF sur google, controlons leur qualite'
+            logging.info('Jai trouve des bandes annonces VF sur google, controlons leur qualite')
+            cleanlistvf,listlowqvf=totqualcontrol(listgooglevf,'vf')
+            if cleanlistvf:
                 print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
                 logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
-                videodl(cleanlist,trailername,moviename,trailerpath)
-                countgoogle+=1     
+                videodl(cleanlistvf,trailername,moviename,trailerpath)
+                countgoogle+=1
+                continue
             else:
-                print 'Aucune bande annnonce trouvee pour ' + moviename + ' sur dailymotion en HD essai dune autre recherche'
-                logging.info('Aucune bande annnonce trouvee pour ' + moviename + ' sur dailymotion en HD essai dune autre recherche')
-                searchstring=moviename[:-5] + u' bande annonce vf HD'
-                urldic=googlesearch(searchstring+' site:http://www.youtube.com')
-                cleanlistctrl=cleandic(urldic,moviename)
-                cleanlist=[]
-                for tocontrolqual in cleanlistctrl:
-                    print 'Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...'
-                    logging.info('Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...')
-                    if quacontrol(tocontrolqual):
-                        print 'La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste'
-                        logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
-                        cleanlist.append(tocontrolqual)
-                    else:
-                        print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
-                        logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
-                        listlowq.append(tocontrolqual)
-                if cleanlist:
+                print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vf Allocine'
+                logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vf Allocine')
+                maxqual=quacontrolallo(listvfallo,'vf')
+                videodl(listvfallo,trailername,moviename,trailerpath,True,maxqual)
+                countallo+=1
+                continue
+        else:
+            print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vf Allocine'
+            logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vf Allocine')
+            maxqual=quacontrolallo(listvfallo,'vf')
+            videodl(listvfallo,trailername,moviename,trailerpath,True,maxqual)
+            countallo+=1
+            continue
+        
+    elif listgooglevf:
+        cleanlistvf,listlowqvf=totqualcontrol(listgooglevf,'vf')
+        if cleanlistvf:
+            print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
+            logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
+            videodl(cleanlistvf,trailername,moviename,trailerpath)
+            countgoogle+=1
+            continue
+        elif listlowqvf:
+            print 'Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD vf trouve sur google'
+            logging.info('Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD vf trouve sur google')
+            videodl(listlowqvf,trailername,moviename,trailerpath)
+            countgoogle+=1
+            continue
+    elif listvostfrallo:
+        maxqual=quacontrolallo(listvostfrallo,'vostfr')
+        if maxqual>=481:
+            videodl(cleanlistvf,trailername,moviename,trailerpath,True,maxqual)
+            countallo+=1
+            continue
+        else:
+            if listgooglevostfr:
+                cleanlistvostfr,listlowqvostfr=totqualcontrol(listgooglevostfr,'vostfr')
+                if cleanlistvostfr:
                     print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
                     logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
-                    videodl(cleanlist,trailername,moviename,trailerpath)
-                    countgoogle+=1     
-                else:
-                    print 'Aucune bande annnonce trouvee pour ' + moviename[:-5] + ' sur youtube en HD essai dune autre recherche sur dailymotion'
-                    logging.info('Aucune bande annnonce trouvee pour ' + moviename[:-5] + ' sur youtube en HD essai dune autre recherche sur dailymotion')
-                    searchstring=moviename[:-5] + u' bande annonce vf HD'
-                    urldic=googlesearch(searchstring+' site:http://www.dailymotion.com')
-                    cleanlistctrl=cleandic(urldic,moviename)
-                    cleanlist=[]
-                    for tocontrolqual in cleanlistctrl:
-                        print 'Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...'
-                        logging.info('Controle de la qualite reelle de ' +tocontrolqual+ ' en cours...')
-                        if quacontrol(tocontrolqual):
-                            print 'La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste'
-                            logging.info('La qualite de ' +tocontrolqual+' semble HD je rajoute a la liste')
-                            cleanlist.append(tocontrolqual)
-                        else:
-                            print 'Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD'
-                            logging.info('Pfffff encore un mytho la qualite de ' +tocontrolqual+' nest pas HD')
-                            listlowq.append(tocontrolqual)
-                    if cleanlist:
-                        print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
-                        logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
-                        videodl(cleanlist,trailername,moviename,trailerpath)
-                        countgoogle+=1     
-                    else:
-                        if listBA:
-                            print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD Allocine'
-                            logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD Allocine')
-                            linkallo=listBA[0]['link']
-                            heightbaallo=listBA[0]['height']
-                            print 'Telechargement de la bande annonce suivante : ' + linkallo +' en '+str(heightbaallo)+'p en cours...'
-                            logging.info('Telechargement de la bande annonce suivante : ' + linkallo +' en '+str(heightbaallo)+'p en cours...')
-                            urllib.urlretrieve(linkallo, os.path.join(trailerpath,trailername)+'.'+extallo)
-                            countallo+=1
-                            print 'Une bande annonce telechargee pour ' + moviename +' sur Allocine'
-                            logging.info('Une bande annonce telechargee pour ' + moviename +' sur Allocine')
-                        else:
-                            if listlowq:
-                                print 'Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD trouve sur google'
-                                logging.info('Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD trouve sur google')
-                                videodl(listlowq,trailername,moviename,trailerpath)
-                                countgoogle+=1
-                            else:
-                                print 'Snifff encore un film pourri pas de bande annonce trouve pour ' + moviename
-                                logging.info('Snifff encore un film pourri pas de bande annonce trouve pour ' + moviename)
-                                notfound.append(moviename)
+                    videodl(cleanlistvostfr,trailername,moviename,trailerpath)
+                    countgoogle+=1
+                    continue    
+                else: 
+                    print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine'
+                    logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine')
+                    videodl(listvostfrallo,trailername,moviename,trailerpath,maxqual)
+                    countallo+=1
+                    continue
+            else: 
+                print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine'
+                logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine')
+                videodl(listvostfrallo,trailername,moviename,trailerpath,maxqual)
+                countallo+=1
+                continue
+    
+    elif listgooglevostfr:
+        cleanlistvostfr,listlowqvostfr=totqualcontrol(listgooglevostfr,'vostfr')
+        if cleanlistvostfr:
+            print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
+            logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
+            videodl(cleanlistvostfr,trailername,moviename,trailerpath)
+            countgoogle+=1
+            continue
+        elif listlowqvostfr:
+            print 'Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD vostfr trouve sur google'
+            logging.info('Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD vostfr trouve sur google')
+            videodl(listlowqvostfr,trailername,moviename,trailerpath)
+            countgoogle+=1
+            continue
+    elif listvoallo:
+        maxqual=quacontrolallo(listvoallo,'vo')
+        if maxqual>=481:
+            videodl(listvoallo,trailername,moviename,trailerpath,True,maxqual)
+            countallo+=1
+            continue
+        else:
+            if listgooglevo:
+                cleanlistvo,listlowqvo=totqualcontrol(listgooglevo,'vo')
+                if cleanlistvo:
+                    print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
+                    logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
+                    videodl(cleanlistvo,trailername,moviename,trailerpath)
+                    countgoogle+=1
+                    continue    
+                else: 
+                    print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine'
+                    logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine')
+                    videodl(listvoallo,trailername,moviename,trailerpath,maxqual)
+                    countallo+=1
+                    continue
+            else: 
+                print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine'
+                logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine')
+                videodl(listvoallo,trailername,moviename,trailerpath,maxqual)
+                countallo+=1
+                continue
+            
+    elif listgooglevo:
+        cleanlistvo,listlowqvo=totqualcontrol(listgooglevo,'vos')
+        if cleanlistvo:
+            print 'Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go'
+            logging.info('Si jen crois google jai trouve mieux que la bande annonce allocine . Lets go')
+            videodl(cleanlistvo,trailername,moviename,trailerpath)
+            countgoogle+=1
+            continue
+        elif listlowqvo:
+            print 'Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD vo trouve sur google'
+            logging.info('Rien trouve sur Allocine pour : ' +moviename+' je recupere donc une bande annonce non HD vo trouve sur google')
+            videodl(listlowqvo,trailername,moviename,trailerpath)
+            countgoogle+=1
+            continue
+    else:
+        print 'Snifff encore un film pourri pas de bande annonce trouve pour ' + moviename
+        logging.info('Snifff encore un film pourri pas de bande annonce trouve pour ' + moviename)
+        notfound.append(moviename)
+        continue
+end=int(time.time())
+duree=round((end-start)/60,2)
+dureehorswait=round((end-start-waittime)/60,2)
+textdureehorswait=str(dureehorswait)
+textduree=str(duree)
 if notfound:
     file = open("BANONDL.txt", "w")
 for nf in notfound:
@@ -375,6 +566,10 @@ print str(countgoogle) + ' bandes annonces telechargees sur Google'
 logging.info(str(countgoogle) + ' bandes annonces telechargees sur Google')
 print str(countallo+countgoogle)+ ' bandes annonces telechargees sur un total de '+str(len(fichier)) 
 logging.info(str(countallo+countgoogle)+ ' bandes annonces telechargees sur un total de '+str(len(fichier)))
+print 'Duree totale environ ' +textduree+ ' minutes' 
+logging.info('Duree totale environ ' +textduree+ ' minutes')
+print 'Duree reelle (sans attente google) environ ' +textdureehorswait+ ' minutes' 
+logging.info('Duree reelle (sans attente google) environ ' +textdureehorswait+ ' minutes')
 print 'Veuillez appuyer sur ENTREE pour fermer la fenetre'
 raw_input()
     
