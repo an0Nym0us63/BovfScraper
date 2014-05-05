@@ -56,7 +56,7 @@ def controltitle(title,moviename):
     for word in cleantitles.split():
         if word not in listcommonwords and word not in realtitle.split() and word<>year:
             wordsleft.append(word)
-    logging.info(title+' ###nettoyere en### '+str(wordsleft))
+    logging.info(title+' ###nettoyer en### '+str(wordsleft))
     if len(wordsleft)==0:
         return True
     else:
