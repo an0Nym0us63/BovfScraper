@@ -39,28 +39,70 @@ except AttributeError:
 path = directory
 
 def cleantitle(title):
-    specialchars=[',','.',';','!','?','-',':','_','  ']
+    specialchars=['(',')',',','.',';','!','?','-',':','_','[',']','|','  ','  ','  ']
     title=unicodedata.normalize('NFKD',title).encode('ascii','ignore')
     for chars in specialchars:
-        if chars=='  ':
-            title=title.replace(chars,' ')
-        else:
-            title=title.replace(chars,'')        
+        title=title.replace(chars,' ')        
     return title.lower()
 
+def controltitle(title,moviename):
+    realtitle=cleantitle(moviename[:-5].decode('unicode-escape'))
+    year=moviename[len(moviename)-4:]
+    listcommonwords=['youtube','dailymotion','vf','francais','francaise','vo','vost','version','annonce','bande','bande-annonce','trailer',
+                     'vostfr','fr','bandeannonce','video','ba','hd','hq','720p','1080p','film','official','#1','#2',
+                     '#4','#6','#7']
+    wordsleft=[]
+    cleantitles=cleantitle(title)
+    for word in cleantitles.split():
+        if word not in listcommonwords and word not in realtitle.split() and word<>year:
+            wordsleft.append(word)
+    logging.info(title+' ###nettoyere en### '+str(wordsleft))
+    if len(wordsleft)==0:
+        return True
+    else:
+        return False
 def cleandic(dict,moviename):
+    series=['2','3','4','5','6','7','8']
     titlenames=urldic.keys()
     listkeysvf=[]
     listkeysvostfr=[]
     listkeysvo=[]
+    year=moviename[len(moviename)-4:]
     for titledict in titlenames:
+        testcontinue=controltitle(titledict,moviename)
+        if testcontinue==False:
+            continue
         cleandict=cleantitle(titledict)
-        if cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'annonce' in cleandict and ('vf' in cleandict or 'francais' in cleandict) :
-            listkeysvf.append(titledict)
-        elif cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'annonce' in cleandict and ('vost' in cleandict):
-            listkeysvostfr.append(titledict)
-        elif cleantitle(moviename[:-5].decode('unicode-escape')) in cleandict and 'annonce' in cleandict:
-            listkeysvo.append(titledict)
+        if not '3d' in cleandict and 'annonce' in cleandict and ('vf' in cleandict or 'francais' in cleandict or ' fr ' in cleandict) and not ' vo ' in cleandict :
+            if year in cleandict:
+                listkeysvf.append(titledict)
+            else:
+                compteur=0
+                for x in series:
+                    if x in cleandict and not x in moviename[:-5]:
+                        compteur+=1
+                if compteur==0:
+                    listkeysvf.append(titledict)
+        elif not '3d' in cleandict and 'annonce' in cleandict and ('vost' in cleandict):
+            if year in cleandict:
+                listkeysvostfr.append(titledict)
+            else:
+                compteur=0
+                for x in series:
+                    if x in cleandict and not x in moviename[:-5]:
+                        compteur+=1
+                if compteur==0:
+                    listkeysvostfr.append(titledict)
+        elif not '3d' in cleandict and 'annonce' in cleandict or 'trailer' in cleandict:
+            if year in cleandict:
+                listkeysvo.append(titledict)
+            else:
+                compteur=0
+                for x in series:
+                    if x in cleandict and not x in moviename[:-5]:
+                        compteur+=1
+                if compteur==0:
+                    listkeysvo.append(titledict)
     urllistvf=[]
     urllistvostfr=[]
     urllistvo=[]
@@ -101,11 +143,11 @@ def libraryscan(path):
                     filename=i
                     filename=filename[:filename.rfind(")")].replace(' 3DBD','').replace('(','').replace(')','')
                     fichier.append([fileroot,filename,i[:-4]])
-                    print str(currentnumber)+' fichiers scannes sur un total de '+str(numberfiles)   
+                print str(currentnumber)+' fichiers scannes sur un total de '+str(numberfiles)   
     print str(numberfiles)+' fichiers scannes sur un total de '+str(numberfiles)
     return fichier
 
-def googlesearch(searchstring):
+def googlesearch(searchstringori):
     global lastgsearch
     global waittime
     actualtime=int(time.time())
@@ -115,8 +157,8 @@ def googlesearch(searchstring):
         time.sleep(timetosleep)
         waittime+=timetosleep
     lastgsearch = int(time.time())
-    searchstring=searchstring.replace(' ','+')
-
+    searchstring=searchstringori[:-5].replace(' ','+')
+    
     regexurl ="url(?!.*url).*?&amp"
     patternurl = re.compile(regexurl)
 
@@ -127,7 +169,7 @@ def googlesearch(searchstring):
     br.set_handle_robots(False)
     br.addheaders=[('User-agent','chrome')]
 
-    query="https://www.google.fr/search?num=100&q=bande-annonce+OR+bande+OR+annonce+"+'"'+searchstring+'"'"+VF+HD+site:http://www.youtube.com+OR+site:http://www.dailymotion.com&ie=latin-1&oe=latin-1&aq=t&rls=org.mozilla:fr:official&client=firefox-a&channel=np&source=hp&gfe_rd=cr&ei=MW9lU_vDIK2A0AXbroCADw"
+    query="https://www.google.fr/search?num=100&q=bande-annonce+OR+bande+OR+annonce+"+'"'+searchstring+'"'+"+VF+HD+site:http://www.youtube.com+OR+site:http://www.dailymotion.com&ie=latin-1&oe=latin-1&aq=t&rls=org.mozilla:fr:official&client=firefox-a&channel=np&source=hp&gfe_rd=cr&ei=MW9lU_vDIK2A0AXbroCADw"
     print 'En train de rechercher sur google : ' +searchstring
     logging.info('En train de rechercher sur google : ' +searchstring)
     htmltext=br.open(query).read()
@@ -142,8 +184,7 @@ def googlesearch(searchstring):
         try:
             soup2 = BeautifulSoup(str(li))
             links= soup2.findAll('a')
-            #TOCLEAN
-            if ('.youtube.' in str(links) or '.dailymotion.' in str(links)) and not 'webcache' in str(links): 
+            if not 'webcache' in str(links): 
                 source_link=links[0]
                 source_url = str(re.findall(patternurl,str(source_link))[0]).replace('url?q=','').replace('&amp','').replace('%3F','?').replace('%3D','=')
                 source_title= str(re.findall(patterntitle,str(source_link))[0]).replace('">','').replace('</a','').replace('<b>','').replace('</b>','').decode("utf-8")
@@ -240,8 +281,7 @@ def allocinesearch(moviename):
                     heightbaallo=bestba['height']
                     longadr=len(linkallo)
                     extallo=linkallo[longadr-3:]
-                    isstfr=trailerallo['media']['subtitles']['$']
-                    if isstfr ==u'Français':
+                    if hasattr(trailerallo['media'],'subtitles') and trailerallo['media']['subtitles']['$'] ==u'Français':
                         print "Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid)
                         logging.info("Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid))
                         listallovostfr.append({'link':linkallo,'ext':extallo,'height':heightbaallo})
@@ -250,13 +290,14 @@ def allocinesearch(moviename):
                     else:
                         print "Potentiel code de bande annonce [{0}] en VO".format(lienid)
                         logging.info("Potentiel code de bande annonce [{0}] en VO".format(lienid))
-                        listallovo.append({'link':linkallo,'ext':extallo,'height':heightallo})
+                        listallovo.append({'link':linkallo,'ext':extallo,'height':heightbaallo})
                         print 'Bande annonce vo trouve sur Allocine je continue de chercher'
                         logging.info('Bande annonce vo trouve sur Allocine je continue de chercher')
                 
                 else:
                     continue
-            except:
+            except Exception,e:
+                print e
                 continue
         print str(len(listallovf)) +" bandes annonces en VF trouvees sur allocine"
         logging.info(str(len(listallovf)) +" bandes annonces en VF trouvees sur allocine")
@@ -339,7 +380,7 @@ def videodl(cleanlist,trailername,moviename,trailerpath,allo=False,maxheight=0):
                     else:
                         listetemp=glob.glob(os.path.join(rootDir,'*'))
                         for listfile in listetemp:
-                            if unicodedata.normalize('NFKD', trailername).encode('ascii','ignore') in listfile:
+                            if unicodedata.normalize('NFKD', trailername.replace("'",'')).encode('ascii','ignore') in listfile:
                                 ext=listfile[-4:]
                                 destination=dest+ext
                                 shutil.move(listfile, destination)
@@ -400,7 +441,7 @@ for movie in fichier:
     trailerpath=movie[0]
     moviename = unicodedata.normalize('NFKD', movie[1]).encode('ascii','ignore')
     trailername=movie[2]+'-trailer'
-    searchstring=moviename[:-5]
+    searchstring=moviename
     listvfallo,listvostfrallo,listvoallo=allocinesearch(moviename)
     if listvfallo:
         maxqual=quacontrolallo(listvfallo,'vf')
@@ -476,13 +517,13 @@ for movie in fichier:
                 else: 
                     print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine'
                     logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine')
-                    videodl(listvostfrallo,trailername,moviename,trailerpath,maxqual)
+                    videodl(listvostfrallo,trailername,moviename,trailerpath,True,maxqual)
                     countallo+=1
                     continue
             else: 
                 print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine'
                 logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vostfr Allocine')
-                videodl(listvostfrallo,trailername,moviename,trailerpath,maxqual)
+                videodl(listvostfrallo,trailername,moviename,trailerpath,True,maxqual)
                 countallo+=1
                 continue
     
@@ -518,13 +559,13 @@ for movie in fichier:
                 else: 
                     print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine'
                     logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine')
-                    videodl(listvoallo,trailername,moviename,trailerpath,maxqual)
+                    videodl(listvoallo,trailername,moviename,trailerpath,True,maxqual)
                     countallo+=1
                     continue
             else: 
                 print 'Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine'
                 logging.info('Rien trouve de mieux sur google pour : '+moviename+' je telecharge donc la bande annonce non HD vo Allocine')
-                videodl(listvoallo,trailername,moviename,trailerpath,maxqual)
+                videodl(listvoallo,trailername,moviename,trailerpath,True,maxqual)
                 countallo+=1
                 continue
             
@@ -570,6 +611,6 @@ print 'Duree totale environ ' +textduree+ ' minutes'
 logging.info('Duree totale environ ' +textduree+ ' minutes')
 print 'Duree reelle (sans attente google) environ ' +textdureehorswait+ ' minutes' 
 logging.info('Duree reelle (sans attente google) environ ' +textdureehorswait+ ' minutes')
-print 'Veuillez appuyer sur ENTREE pour fermer la fenetre'
+print 'Veuillez appuyer sur ENTREE pour fermer la fenetre. Pensez a jeter un oeil aux fichiers trace.log et BANONDL.txt'
 raw_input()
     
