@@ -185,3 +185,24 @@ class allocine(object):
         response = self._do_request('media',params);
 
         return response;
+    
+    def movielist(self, typemovie, profile="large", mediafmt="mp4-lc:m"):
+        """Get the movie details by ID
+        Param:
+            id -- Unique ID of the movie your search for
+            profile -- Level of details to return (small, medium, large)
+            mediafmt -- The media format (flv, mp4-lc, mp4-hip, mp4-archive, mpeg2-theater, mpeg2)
+        """
+        # build the params
+        params = {}
+        params['format'] = 'json'
+        params['partner'] = self._partner_key        
+        params['profile'] = profile
+        params['filter'] = typemovie
+        params['order'] = 'toprank'
+        params['count'] = 30
+
+        # do the request
+        response = self._do_request('movielist',params);
+
+        return response;

@@ -53,7 +53,7 @@ def controltitle(title,moviename):
     for word in cleantitles.split():
         if word not in listcommonwords and word not in realtitle.split() and word<>year:
             wordsleft.append(word)
-    logg(title+' \\\\nettoyer en//// '+str(wordsleft),True)
+    logg(title+' \\\\nettoye en//// '+str(wordsleft),True)
     if len(wordsleft)==0:
         return True
     else:
@@ -235,7 +235,7 @@ def allocinesearch(moviename):
         
         for lien in rows:
             try:
-                if 'Bande-annonce' in str(lien) and 'VF' in str(lien):
+                if 'annonce' in str(lien).lower() and 'vf' in str(lien).lower():
                     lienid=lien['href'][:lien['href'].find('&')].replace('/video/player_gen_cmedia=','')
                     logg("Potentiel code de bande annonce [{0}] en VF".format(lienid))
                     trailerallo = api.trailer(lienid)
@@ -252,7 +252,7 @@ def allocinesearch(moviename):
                         break
                     else:
                         logg('Bande annonce vf non HD trouve sur Allocine je continue de chercher')
-                elif 'Bande-annonce' in str(lien) and 'VOSTFR' in str(lien):
+                elif 'annonce' in str(lien).lower() and 'vost' in str(lien).lower():
                     lienid=lien['href'][:lien['href'].find('&')].replace('/video/player_gen_cmedia=','')
                     logg("Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid))
                     trailerallo = api.trailer(lienid)
@@ -265,7 +265,7 @@ def allocinesearch(moviename):
                     
                     listallovostfr.append({'link':linkallo,'ext':extallo,'height':heightbaallo})
                     logg('Bande annonce vostfr trouve sur Allocine je continue de chercher')
-                elif 'Bande-annonce' in str(lien) and 'VO' in str(lien):
+                elif 'annonce' in str(lien).lower() and ' vo ' in str(lien).lower():
                     lienid=lien['href'][:lien['href'].find('&')].replace('/video/player_gen_cmedia=','') 
                     trailerallo = api.trailer(lienid)
                     long=len(trailerallo['media']['rendition'])
@@ -274,7 +274,7 @@ def allocinesearch(moviename):
                     heightbaallo=bestba['height']
                     longadr=len(linkallo)
                     extallo=linkallo[longadr-3:]
-                    if hasattr(trailerallo['media'],'subtitles') and trailerallo['media']['subtitles']['$'] ==u'Français':
+                    if hasattr(trailerallo['media'],'subtitles') and trailerallo['media']['subtitles']['$'].lower().replace('ç','c') ==u'francais':
                         logg("Potentiel code de bande annonce [{0}] en VOSTFR".format(lienid))
                         listallovostfr.append({'link':linkallo,'ext':extallo,'height':heightbaallo})
                         logg('Bande annonce vostfr trouve sur Allocine je continue de chercher')
