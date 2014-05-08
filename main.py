@@ -60,7 +60,7 @@ def controltitle(title,moviename):
         return False
 def cleandic(dict,moviename):
     series=['2','3','4','5','6','7','8']
-    titlenames=urldic.keys()
+    titlenames=dict.keys()
     listkeysvf=[]
     listkeysvostfr=[]
     listkeysvo=[]
