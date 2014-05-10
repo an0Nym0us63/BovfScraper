@@ -36,7 +36,7 @@ def logg(str,debug=None):
     return True
 
 def cleantitle(title):
-    specialchars=['(',')',',','.',';','!','?','-',':','_','[',']','|','  ','  ','  ']
+    specialchars=['/','(',')',',','.',';','!','?','-',':','_','[',']','|','  ','  ','  ']
     title=unicodedata.normalize('NFKD',title).encode('ascii','ignore')
     for chars in specialchars:
         title=title.replace(chars,' ')        
@@ -47,7 +47,7 @@ def controltitle(title,moviename):
     year=moviename[len(moviename)-4:]
     listcommonwords=['youtube','dailymotion','vf','francais','francaise','vo','vost','version','annonce','bande','bande-annonce','trailer',
                      'vostfr','fr','bandeannonce','video','ba','hd','hq','720p','1080p','film','official','#1','#2',
-                     '#4','#6','#7','du','and','premiere','n°1','n°2','n°3','n°4','n°5','officielle']
+                     '#4','#6','#7','du','and','premiere','n°1','n°2','n°3','n°4','n°5','officielle','theatrical']
     wordsleft=[]
     cleantitles=cleantitle(title)
     for word in cleantitles.split():
@@ -58,6 +58,21 @@ def controltitle(title,moviename):
         return True
     else:
         return False
+
+def controltitle2(title,moviename):
+    realtitle=cleantitle(moviename[:-5].decode('unicode-escape'))
+    year=moviename[len(moviename)-4:]
+    wordsleft=[]
+    cleantitles=cleantitle(title)
+    for word in realtitle.split():
+        if word not in cleantitles.split():
+            wordsleft.append(word)
+    logg(title+' \\\\mots non trouves//// '+str(wordsleft),True)
+    if len(wordsleft)==0:
+        return True
+    else:
+        return False
+
 def cleandic(dict,moviename):
     series=['2','3','4','5','6','7','8']
     titlenames=dict.keys()
@@ -69,8 +84,11 @@ def cleandic(dict,moviename):
         testcontinue=controltitle(titledict,moviename)
         if testcontinue==False:
             continue
+        testcontinue2=controltitle2(titledict,moviename)
+        if testcontinue2==False:
+            continue
         cleandict=cleantitle(titledict)
-        if not '3d' in cleandict and ('vf' in cleandict or 'francais' in cleandict or ' fr ' in cleandict) and not ' vo ' in cleandict :
+        if ('vf' in cleandict or 'francais' in cleandict or ' fr ' in cleandict) and not ' vo ' in cleandict :
             if year in cleandict:
                 listkeysvf.append(titledict)
             else:
@@ -80,7 +98,7 @@ def cleandic(dict,moviename):
                         compteur+=1
                 if compteur==0:
                     listkeysvf.append(titledict)
-        elif not '3d' in cleandict and ('vost' in cleandict):
+        elif ('vost' in cleandict):
             if year in cleandict:
                 listkeysvostfr.append(titledict)
             else:
@@ -90,7 +108,8 @@ def cleandic(dict,moviename):
                         compteur+=1
                 if compteur==0:
                     listkeysvostfr.append(titledict)
-        elif not '3d' in cleandict:
+        else:
+            logg('Aucun moyen didentifier la langue pour '+cleandict+' je suppose que cest de la VO')
             if year in cleandict:
                 listkeysvo.append(titledict)
             else:
@@ -144,7 +163,7 @@ def libraryscan(path):
 def googlesearch(searchstringori):
     global lastgsearch
     global waittime
-    uploadtoignore=['UniversalMoviesFR']
+    uploadtoignore=['UniversalMoviesFR','ParamountmoviesFR']
     actualtime=int(time.time())
     if actualtime-lastgsearch<60:
         timetosleep= 60-(actualtime-lastgsearch)
@@ -164,7 +183,7 @@ def googlesearch(searchstringori):
     br.set_handle_robots(False)
     br.addheaders=[('User-agent','chrome')]
 
-    query="https://www.google.fr/search?num=100&q=bande-annonce+OR+bande+OR+annonce+"+'"'+searchstring+'"'+"+VF+HD+site:http://www.youtube.com+OR+site:http://www.dailymotion.com&ie=latin-1&oe=latin-1&aq=t&rls=org.mozilla:fr:official&client=firefox-a&channel=np&source=hp&gfe_rd=cr&ei=MW9lU_vDIK2A0AXbroCADw"
+    query="https://www.google.fr/search?num=100&q=bande-annonce+OR+bande+OR+annonce"+'"'+searchstring+'"'+"+VF+HD+site:http://www.youtube.com+OR+site:http://www.dailymotion.com&ie=latin-1&oe=latin-1&aq=t&rls=org.mozilla:fr:official&client=firefox-a&channel=np&source=hp&gfe_rd=cr&ei=MW9lU_vDIK2A0AXbroCADw"
     logg('En train de rechercher sur google : ' +searchstring)
     logg('Query : ' +query,True)
     htmltext=br.open(query).read()
