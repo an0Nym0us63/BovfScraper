@@ -147,7 +147,7 @@ def libraryscan(path):
         for i in files:
             currentnumber+=1
             trailercount=0
-            if ('.mkv' in i or '.avi' in i or '.mp4' in i) and '-trailer' not in i:
+            if ('.mkv' in i.lower() or '.avi' in i.lower() or '.mp4' in i.lower() or '.m2ts' in i.lower() or '.mk3d' in i.lower()) and '-trailer' not in i:
                 for x in os.listdir(root):
                     if '-trailer' in x:
                         trailercount+=1
@@ -239,9 +239,6 @@ def allocinesearch(moviename):
             if cleantitle(moviename[:-5].decode('unicode-escape')) in ficheresulttitle and countseries==0 and int(moviename[len(moviename)-4:])+2>yearresult and int(moviename[len(moviename)-4:])-2<yearresult:
                 goodresult=result
                 break
-        logg("Resultat : Nombre [{0}] Code [{1}] Titre original [{2}]".format(search['feed']['totalResults'],
-                                                                    goodresult['code'],
-                                                                    goodresult['originalTitle'].encode("latin-1")))
         logg('Recherche de la fiche du film avec le code : ' + str(goodresult['code']))
         movieallo = ficheresult
         for x in movieallo['movie']['link']:
